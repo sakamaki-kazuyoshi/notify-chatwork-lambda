@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  SysName:
+    Type: String
+    Default: test
+
+  Env:
+    Type: String
+    Default: prd
+    AllowedValues:
+      - prd
+      - dev
+
+  SubscriptionEmailEndpoint:
+    Type: String
+
+  ChatworkApikey:
+    Type: String
+    NoEcho: true
+
+  ChatworkRoomid:
+    Type: Number
+    NoEcho: true
+
+  ChatworkUserID:
+    Type: Number
+
+  ChatworkEndpoint:
+    Type: String
+    Default: https://api.chatwork.com/v2
+
+  ChatworkHeader:
+    Type: String
+    Default: X-ChatWorkToken
+
+Resources:
+  LambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${SysName}-${Env}-lambda-notify-chatwork
+      CodeUri: functions/
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      Timeout: 60
+      Role: !GetAtt LambdaFunctionRole.Arn
+      Environment:
+        Variables:
+          CHATWORK_APIKEY : !Sub ${ChatworkApikey}
+          CHATWORK_ROOMID : !Sub ${ChatworkRoomid}
+          CHATWORK_USERID : !Sub ${ChatworkUserID}
+          CHATWORK_ENDPOINT : !Sub ${ChatworkEndpoint}
+          CHATWORK_HEADER : !Sub ${ChatworkHeader}
+
+  LambdaFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${SysName}-${Env}-iam-role-lambda-notify-chatwork
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  LambdaFunctionSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${SysName}-${Env}-topic-lambda-mail
+      DisplayName: !Sub ${SysName}-${Env}-topic-lambda-mail
+      Subscription:
+        - Endpoint: !Ref SubscriptionEmailEndpoint
+          Protocol: email
+
+  LambdaFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${SysName}-${Env}-alarm-lambda-notify-chatwork-errors
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: Resource
+          Value: !Ref LambdaFunction
+        - Name: FunctionName
+          Value: !Ref LambdaFunction
+      MetricName: Errors
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      Period: 300
+      EvaluationPeriods: 1
+      Statistic: Maximum
+      Threshold: 0
+      AlarmActions:
+        - !Ref LambdaFunctionSnsTopic
+
+
+
+
+
