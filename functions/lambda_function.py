@@ -11,7 +11,6 @@ def lambda_handler(event, context):
     chatwork_roomid = os.environ['CHATWORK_ROOMID']     # 環境変数よりChatoworkルームID取得
     chatwork_endpoint = os.environ['CHATWORK_ENDPOINT'] # 環境変数よりChatoworkエンドポイント取得
     chatwork_header = os.environ['CHATWORK_HEADER']     # 環境変数よりChatoworkリクエストヘッダ取得
-    chatwork_userid = os.environ['CHATWORK_USERID']     # 環境変数よりChatoworkユーザID取得
 
     # ハンドラーに渡されたイベントデータをロギング
     logger.info("EVENT: " + json.dumps(event))
@@ -25,7 +24,7 @@ def lambda_handler(event, context):
     # indentオプション指定し改行等を保った状態でJSON形式にエンコード
     json_message = json.dumps(dict_message, indent=2)
 
-    # EventBrige経由のイベントはsubjectが設定されていないのでメッセージ部より取得
+    # EventBridge経由のイベントはsubjectが設定されていないのでメッセージ部より取得
     if subject is None:
         subject = dict_message['detail-type']
 
@@ -33,14 +32,15 @@ def lambda_handler(event, context):
     headers = {chatwork_header: chatwork_apikey}
 
     # SNSイベントよりChatworkメッセージ生成（インフォメーション + タイトル、絵文字無変換）
-    chatwork_message = '[To:{0}][info][title]{1}[/title][code]{2}[/code][/info]'.format(chatwork_userid,subject,json_message)
+    chatwork_message = '[info][title]{0}[/title][code]{1}[/code][/info]'.format(subject,json_message)
     payload = {'body': chatwork_message}
 
     # Chatwork APIを利用するためのURL
     url = '{0}/rooms/{1}/messages'.format(chatwork_endpoint,chatwork_roomid)
 
     # Chatworkに投稿
-    response = requests.post(url, headers=headers, params=payload)
+    # paramsパラメータでのペイロードを指定するとクエリストリングとなり、Chatwork API（CloudFrontのURL最大長）の制限に抵触する恐れがあるのでdataパラメータを利用
+    response = requests.post(url,headers=headers,data=payload)
 
     # ステータスコードを判定してロギング
     if response.status_code == requests.codes.ok:
